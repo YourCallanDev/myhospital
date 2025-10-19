@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Medical System Login</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="login-container">
+  <h1>Medical System Login</h1>
+  <form id="loginForm">
+    <label>Username</label>
+    <input type="text" id="username" required>
+    <label>Password</label>
+    <input type="password" id="password" required>
+    <label>Role</label>
+    <select id="role">
+      <option value="reception">Reception</option>
+      <option value="triage">Triage Nurse</option>
+      <option value="doctor">Doctor</option>
+      <option value="admin">Admin</option>
+    </select>
+    <button type="submit">Login</button>
+  </form>
+  <div id="loginError"></div>
+</div>
+<script src="js/main.js"></script>
+<script>
+document.getElementById('loginForm').addEventListener('submit', function(e){
+  e.preventDefault();
+  login(document.getElementById('username').value, document.getElementById('password').value, document.getElementById('role').value);
+});
+</script>
+</body>
+</html>
