@@ -15,7 +15,10 @@ button:hover { background:#0056b3; }
 .tab-buttons button { margin-right:5px; }
 .patient-card { border:1px solid #ccc; padding:10px; margin-bottom:5px; border-radius:5px; background:#f9f9f9; }
 .modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; }
-.modal-content { background:white; padding:20px; border-radius:8px; width:90%; max-width:400px; }
+.modal-content { background:white; padding:20px; border-radius:8px; width:90%; max-width:500px; max-height:90%; overflow-y:auto;}
+.autocomplete-suggestions { border:1px solid #ccc; max-height:150px; overflow-y:auto; background:white; position:absolute; z-index:10; width:400px;}
+.autocomplete-suggestion { padding:5px; cursor:pointer;}
+.autocomplete-suggestion:hover { background:#eee;}
 </style>
 </head>
 <body>
@@ -33,7 +36,8 @@ button:hover { background:#0056b3; }
 
 <div id="reception" class="tab">
   <h2>Reception - Patient Check-In</h2>
-  <input type="text" id="pname" placeholder="Patient Name">
+  <input type="text" id="pname" placeholder="Patient Name" oninput="showSuggestions()">
+  <div id="autocomplete" class="autocomplete-suggestions"></div>
   <input type="date" id="pdob">
   <input type="text" id="pcontact" placeholder="Contact Info">
   <textarea id="psymptoms" placeholder="Symptoms / Reason"></textarea>
@@ -87,158 +91,164 @@ button:hover { background:#0056b3; }
   </div>
 </div>
 
+<!-- Consultation Modal -->
+<div class="modal" id="consultModal" style="display:none;">
+  <div class="modal-content">
+    <h2 id="consultPatientName"></h2>
+    <div><strong>DOB:</strong> <span id="consultDOB"></span></div>
+    <div><strong>Contact:</strong> <span id="consultContact"></span></div>
+    <div><strong>Symptoms:</strong> <span id="consultSymptoms"></span></div>
+    <div><strong>Allergies:</strong> <input type="text" id="consultAllergies" placeholder="Add allergies"></div>
+    <div><strong>Notes:</strong></div>
+    <textarea id="consultNotes" style="width:100%;height:100px;"></textarea>
+    <button onclick="saveConsult()">Save Consultation</button>
+    <button onclick="closeConsult()">Close</button>
+  </div>
+</div>
+
 <script>
-// Initialize localStorage
+// Initialize storage
 if(!localStorage.getItem('patients')) localStorage.setItem('patients', JSON.stringify([]));
 if(!localStorage.getItem('users')) localStorage.setItem('users', JSON.stringify([
   {username:'callan.chesser', password:'Mabelcat1CC!!', role:'admin'}
 ]));
+let currentUser=null;
+let currentConsult=null;
 
-let currentUser = null;
+// Show tab
+function showTab(id){ document.querySelectorAll('.tab').forEach(t=>t.style.display='none'); document.getElementById(id).style.display='block'; }
 
-// Show tab by id
-function showTab(id){
-  document.querySelectorAll('.tab').forEach(t=>t.style.display='none');
-  document.getElementById(id).style.display='block';
-}
-
-// Login function
+// Login
 function login(){
-  const username = document.getElementById('username').value;
-  const password = document.getElementById('password').value;
-  const role = document.getElementById('role').value;
-  const users = JSON.parse(localStorage.getItem('users'));
-  const user = users.find(u=>u.username===username && u.password===password && u.role===role);
+  const username=document.getElementById('username').value;
+  const password=document.getElementById('password').value;
+  const role=document.getElementById('role').value;
+  const users=JSON.parse(localStorage.getItem('users'));
+  const user=users.find(u=>u.username===username && u.password===password && u.role===role);
   if(user){
-    currentUser = user;
+    currentUser=user;
     document.getElementById('loginModal').style.display='none';
     document.getElementById('tabs').style.display='block';
-    renderWaitingList();
-    renderTriageQueue();
-    renderDoctorQueue();
-    renderUserList();
     showRoleTabs(user.role);
-    showTab('waiting');
-  } else {
-    document.getElementById('login-error').innerText="Invalid credentials!";
-  }
+    renderAll();
+  } else { document.getElementById('login-error').innerText="Invalid credentials!"; }
 }
 
 // Logout
-function logout(){
-  currentUser=null;
-  document.getElementById('loginModal').style.display='flex';
-  document.getElementById('tabs').style.display='none';
-}
+function logout(){ currentUser=null; document.getElementById('loginModal').style.display='flex'; document.getElementById('tabs').style.display='none'; }
 
-// Show/hide tabs based on role
+// Role Tabs
 function showRoleTabs(role){
-  const allTabs = document.querySelectorAll('.tab-buttons button');
+  const allTabs=document.querySelectorAll('.tab-buttons button');
   allTabs.forEach(b=>b.style.display='none');
-  if(role==='reception'){
-    ['Reception','Waiting List'].forEach(name=>document.querySelector(`.tab-buttons button:contains('${name}')`).style.display='inline-block');
-  } else if(role==='triage'){
-    ['Triage','Waiting List'].forEach(name=>document.querySelector(`.tab-buttons button:contains('${name}')`).style.display='inline-block');
-  } else if(role==='doctor'){
-    ['Doctor','Waiting List'].forEach(name=>document.querySelector(`.tab-buttons button:contains('${name}')`).style.display='inline-block');
-  } else if(role==='admin'){
-    allTabs.forEach(b=>b.style.display='inline-block');
-  }
+  if(role==='reception'){ ['Reception','Waiting List','Logout'].forEach(name=>showTabButton(name)); }
+  else if(role==='triage'){ ['Triage','Waiting List','Logout'].forEach(name=>showTabButton(name)); }
+  else if(role==='doctor'){ ['Doctor','Waiting List','Logout'].forEach(name=>showTabButton(name)); }
+  else if(role==='admin'){ allTabs.forEach(b=>b.style.display='inline-block'); }
 }
+function showTabButton(name){ document.querySelectorAll('.tab-buttons button').forEach(b=>{if(b.innerText===name)b.style.display='inline-block'; }); }
 
-// Add patient
+// Add patient with autocomplete support
 function addPatient(){
-  const name = document.getElementById('pname').value;
-  const dob = document.getElementById('pdob').value;
-  const contact = document.getElementById('pcontact').value;
-  const symptoms = document.getElementById('psymptoms').value;
+  const name=document.getElementById('pname').value;
+  const dob=document.getElementById('pdob').value;
+  const contact=document.getElementById('pcontact').value;
+  const symptoms=document.getElementById('psymptoms').value;
   if(!name||!dob||!contact||!symptoms) return alert("Fill all fields!");
-  let patients = JSON.parse(localStorage.getItem('patients'));
-  patients.push({id:'P'+Date.now(),name,dob,contact,symptoms,arrivalTime:new Date().toISOString(),triageLevel:3,status:'waiting',notes:[]});
+  let patients=JSON.parse(localStorage.getItem('patients'));
+  // Check if patient exists for autofill
+  let existing=patients.find(p=>p.name.toLowerCase()===name.toLowerCase());
+  if(existing){ existing.dob=dob; existing.contact=contact; existing.symptoms=symptoms; }
+  else { patients.push({id:'P'+Date.now(),name,dob,contact,symptoms,arrivalTime:new Date().toISOString(),triageLevel:3,status:'waiting',notes:[],allergies:''}); }
   localStorage.setItem('patients',JSON.stringify(patients));
-  renderWaitingList();
-  renderTriageQueue();
-  renderDoctorQueue();
-  alert('Patient added!');
+  renderAll();
+  alert('Patient added or updated!');
+  document.getElementById('pname').value=''; document.getElementById('pdob').value=''; document.getElementById('pcontact').value=''; document.getElementById('psymptoms').value='';
 }
 
-// Render waiting list
+// Render all
+function renderAll(){ renderWaitingList(); renderTriageQueue(); renderDoctorQueue(); renderUserList(); }
+
+// Waiting list
 function renderWaitingList(){
   const container=document.getElementById('waitingList');
   container.innerHTML='';
   const patients=JSON.parse(localStorage.getItem('patients')).filter(p=>p.status==='waiting');
-  patients.forEach(p=>{
-    const div=document.createElement('div');
-    div.className='patient-card';
-    div.innerHTML=`<strong>${p.name}</strong> | ${p.symptoms} | Level: ${p.triageLevel} | Arrived: ${new Date(p.arrivalTime).toLocaleTimeString()}`;
-    container.appendChild(div);
-  });
+  patients.forEach(p=>{ const div=document.createElement('div'); div.className='patient-card'; div.innerHTML=`<strong>${p.name}</strong> | Symptoms: ${p.symptoms} | Level: ${p.triageLevel} | Arrived: ${new Date(p.arrivalTime).toLocaleTimeString()}`; container.appendChild(div);});
 }
 
-// Render triage queue
+// Triage queue
 function renderTriageQueue(){
-  const container=document.getElementById('triageQueue');
-  container.innerHTML='';
+  const container=document.getElementById('triageQueue'); container.innerHTML='';
   const patients=JSON.parse(localStorage.getItem('patients')).filter(p=>p.status==='waiting');
-  patients.forEach(p=>{
-    const div=document.createElement('div');
-    div.className='patient-card';
+  patients.forEach(p=>{ const div=document.createElement('div'); div.className='patient-card';
     div.innerHTML=`<strong>${p.name}</strong> | Symptoms: ${p.symptoms} | Level: ${p.triageLevel}
     <button onclick="setTriage('${p.id}',1)">1</button>
     <button onclick="setTriage('${p.id}',2)">2</button>
-    <button onclick="setTriage('${p.id}',3)">3</button>`;
-    container.appendChild(div);
-  });
+    <button onclick="setTriage('${p.id}',3)">3</button>`; container.appendChild(div); });
 }
+function setTriage(id,level){ let patients=JSON.parse(localStorage.getItem('patients')); const p=patients.find(p=>p.id===id); if(p){p.triageLevel=level; localStorage.setItem('patients',JSON.stringify(patients)); renderAll();}}
 
-// Set triage
-function setTriage(id,level){
-  let patients=JSON.parse(localStorage.getItem('patients'));
-  const p=patients.find(p=>p.id===id);
-  if(p){p.triageLevel=level; localStorage.setItem('patients',JSON.stringify(patients)); renderTriageQueue(); renderDoctorQueue(); renderWaitingList();}
-}
-
-// Render doctor queue
+// Doctor queue
 function renderDoctorQueue(){
-  const container=document.getElementById('doctorQueue');
-  container.innerHTML='';
+  const container=document.getElementById('doctorQueue'); container.innerHTML='';
   const patients=JSON.parse(localStorage.getItem('patients')).filter(p=>p.status==='waiting');
-  patients.forEach(p=>{
-    const div=document.createElement('div');
-    div.className='patient-card';
+  patients.forEach(p=>{ const div=document.createElement('div'); div.className='patient-card';
     div.innerHTML=`<strong>${p.name}</strong> | Level: ${p.triageLevel} | Symptoms: ${p.symptoms} 
-    <button onclick="startConsultation('${p.id}')">Start Consultation</button>`;
-    container.appendChild(div);
+    <button onclick="startConsult('${p.id}')">Start Consultation</button>`; container.appendChild(div); });
+}
+
+// Start consultation popup
+function startConsult(id){
+  let patients=JSON.parse(localStorage.getItem('patients'));
+  currentConsult=patients.find(p=>p.id===id);
+  if(!currentConsult) return;
+  document.getElementById('consultPatientName').innerText=currentConsult.name;
+  document.getElementById('consultDOB').innerText=currentConsult.dob;
+  document.getElementById('consultContact').innerText=currentConsult.contact;
+  document.getElementById('consultSymptoms').innerText=currentConsult.symptoms;
+  document.getElementById('consultNotes').value=currentConsult.notes.join('\n');
+  document.getElementById('consultAllergies').value=currentConsult.allergies||'';
+  document.getElementById('consultModal').style.display='flex';
+}
+function saveConsult(){
+  if(!currentConsult) return;
+  let patients=JSON.parse(localStorage.getItem('patients'));
+  const p=patients.find(p=>p.id===currentConsult.id);
+  p.notes=document.getElementById('consultNotes').value.split('\n');
+  p.allergies=document.getElementById('consultAllergies').value;
+  p.status='consulted';
+  localStorage.setItem('patients',JSON.stringify(patients));
+  renderAll();
+  closeConsult();
+  alert('Consultation saved!');
+}
+function closeConsult(){ document.getElementById('consultModal').style.display='none'; currentConsult=null; }
+
+// Admin
+function renderUserList(){ const container=document.getElementById('userList'); container.innerHTML=''; const users=JSON.parse(localStorage.getItem('users')); users.forEach(u=>{ const div=document.createElement('div'); div.innerText=`${u.username} (${u.role})`; container.appendChild(div); }); }
+function addUser(){ const username=document.getElementById('newUsername').value; const password=document.getElementById('newPassword').value; const role=document.getElementById('newRole').value; if(!username||!password) return alert("Fill username/password"); let users=JSON.parse(localStorage.getItem('users')); users.push({username,password,role}); localStorage.setItem('users',JSON.stringify(users)); renderUserList(); alert('User added!');}
+
+// Autocomplete
+function showSuggestions(){
+  const input=document.getElementById('pname').value.toLowerCase();
+  const suggestions=document.getElementById('autocomplete');
+  suggestions.innerHTML='';
+  if(!input) return;
+  const patients=JSON.parse(localStorage.getItem('patients'));
+  patients.filter(p=>p.name.toLowerCase().includes(input)).forEach(p=>{
+    const div=document.createElement('div'); div.className='autocomplete-suggestion'; div.innerText=p.name; div.onclick=()=>{ autofillPatient(p); suggestions.innerHTML=''; };
+    suggestions.appendChild(div);
   });
 }
-
-// Start consultation
-function startConsultation(id){
-  let patients=JSON.parse(localStorage.getItem('patients'));
-  const p=patients.find(p=>p.id===id);
-  if(p){p.status='in-consultation'; localStorage.setItem('patients',JSON.stringify(patients)); renderWaitingList(); renderTriageQueue(); renderDoctorQueue(); alert(`${p.name} in consultation.`);}
+function autofillPatient(p){
+  document.getElementById('pname').value=p.name;
+  document.getElementById('pdob').value=p.dob;
+  document.getElementById('pcontact').value=p.contact;
+  document.getElementById('psymptoms').value=p.symptoms;
 }
 
-// Admin user management
-function renderUserList(){
-  const container=document.getElementById('userList');
-  container.innerHTML='';
-  const users=JSON.parse(localStorage.getItem('users'));
-  users.forEach(u=>{const div=document.createElement('div'); div.innerText=`${u.username} (${u.role})`; container.appendChild(div);});
-}
-function addUser(){
-  const username=document.getElementById('newUsername').value;
-  const password=document.getElementById('newPassword').value;
-  const role=document.getElementById('newRole').value;
-  if(!username||!password) return alert("Fill username/password");
-  let users=JSON.parse(localStorage.getItem('users'));
-  users.push({username,password,role});
-  localStorage.setItem('users',JSON.stringify(users));
-  renderUserList();
-  alert('User added!');
-}
-
-// On load show login modal
+// On load
 document.getElementById('loginModal').style.display='flex';
 </script>
 </body>
