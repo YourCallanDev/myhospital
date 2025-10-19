@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reception - Patient Check-In</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<h1>Reception - Patient Check-In</h1>
+<form id="checkinForm">
+  <input type="text" id="pname" placeholder="Full Name" required>
+  <input type="date" id="pdob" required>
+  <input type="text" id="pcontact" placeholder="Contact Info" required>
+  <textarea id="psymptoms" placeholder="Symptoms / Reason for Visit" required></textarea>
+  <button type="submit">Check In</button>
+</form>
+
+<h2>Current Waiting Patients</h2>
+<div id="waitingList"></div>
+
+<script src="js/main.js"></script>
+<script src="js/checkin.js"></script>
+<script>
+document.getElementById('checkinForm').addEventListener('submit', function(e){
+  e.preventDefault();
+  addPatient({
+    name: document.getElementById('pname').value,
+    dob: document.getElementById('pdob').value,
+    contact: document.getElementById('pcontact').value,
+    symptoms: document.getElementById('psymptoms').value
+  });
+});
+renderWaitingList();
+</script>
+</body>
+</html>
