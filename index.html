@@ -3,34 +3,235 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Medical System Login</title>
-<link rel="stylesheet" href="css/style.css">
+<title>Medical System</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f4; }
+h1,h2 { color: #333; }
+input, textarea, select, button { display: block; margin: 10px 0; padding: 8px; width: 100%; max-width: 400px; }
+button { background-color: #007bff; color: white; border: none; cursor: pointer; }
+button:hover { background-color: #0056b3; }
+.section { display: none; background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);}
+.patient-card { border:1px solid #ccc; padding:10px; margin-bottom:5px; border-radius:5px; background:#f9f9f9; }
+</style>
 </head>
 <body>
-<div class="login-container">
-  <h1>Medical System Login</h1>
-  <form id="loginForm">
-    <label>Username</label>
-    <input type="text" id="username" required>
-    <label>Password</label>
-    <input type="password" id="password" required>
-    <label>Role</label>
-    <select id="role">
-      <option value="reception">Reception</option>
-      <option value="triage">Triage Nurse</option>
-      <option value="doctor">Doctor</option>
-      <option value="admin">Admin</option>
-    </select>
-    <button type="submit">Login</button>
-  </form>
-  <div id="loginError"></div>
+
+<h1>Medical System</h1>
+
+<div id="login-section" class="section">
+  <h2>Login</h2>
+  <input type="text" id="username" placeholder="Username">
+  <input type="password" id="password" placeholder="Password">
+  <select id="role">
+    <option value="reception">Receptionist</option>
+    <option value="triage">Triage Nurse</option>
+    <option value="doctor">Doctor</option>
+    <option value="admin">Admin</option>
+  </select>
+  <button onclick="login()">Login</button>
+  <div id="login-error" style="color:red;"></div>
 </div>
-<script src="js/main.js"></script>
+
+<!-- Reception Section -->
+<div id="reception-section" class="section">
+  <h2>Reception - Check-In</h2>
+  <input type="text" id="pname" placeholder="Patient Name">
+  <input type="date" id="pdob">
+  <input type="text" id="pcontact" placeholder="Contact Info">
+  <textarea id="psymptoms" placeholder="Symptoms / Reason"></textarea>
+  <button onclick="addPatient()">Check In Patient</button>
+</div>
+
+<!-- Waiting List Section -->
+<div id="waiting-section" class="section">
+  <h2>Waiting List</h2>
+  <div id="waitingList"></div>
+</div>
+
+<!-- Triage Section -->
+<div id="triage-section" class="section">
+  <h2>Triage Dashboard</h2>
+  <div id="triageQueue"></div>
+</div>
+
+<!-- Doctor Section -->
+<div id="doctor-section" class="section">
+  <h2>Doctor Dashboard</h2>
+  <div id="doctorQueue"></div>
+</div>
+
+<!-- Admin Section -->
+<div id="admin-section" class="section">
+  <h2>Admin Dashboard</h2>
+  <h3>Manage Users</h3>
+  <input type="text" id="newUsername" placeholder="Username">
+  <input type="password" id="newPassword" placeholder="Password">
+  <select id="newRole">
+    <option value="reception">Receptionist</option>
+    <option value="triage">Triage Nurse</option>
+    <option value="doctor">Doctor</option>
+    <option value="admin">Admin</option>
+  </select>
+  <button onclick="addUser()">Add User</button>
+  <div id="userList"></div>
+</div>
+
 <script>
-document.getElementById('loginForm').addEventListener('submit', function(e){
-  e.preventDefault();
-  login(document.getElementById('username').value, document.getElementById('password').value, document.getElementById('role').value);
-});
+// Initialize localStorage
+if(!localStorage.getItem('patients')) localStorage.setItem('patients', JSON.stringify([]));
+if(!localStorage.getItem('users')) localStorage.setItem('users', JSON.stringify([
+  {username:'callan.chesser', password:'Mabelcat1CC!!', role:'admin'}
+]));
+
+// Current user
+let currentUser = null;
+
+// Login function
+function login(){
+  const username = document.getElementById('username').value;
+  const password = document.getElementById('password').value;
+  const role = document.getElementById('role').value;
+  const users = JSON.parse(localStorage.getItem('users'));
+  const user = users.find(u => u.username === username && u.password === password && u.role === role);
+  if(user){
+    currentUser = user;
+    document.getElementById('login-section').style.display = 'none';
+    showSectionsByRole(user.role);
+    renderWaitingList();
+    renderTriageQueue();
+    renderDoctorQueue();
+    renderUserList();
+  } else {
+    document.getElementById('login-error').innerText = "Invalid credentials!";
+  }
+}
+
+// Show sections based on role
+function showSectionsByRole(role){
+  if(role === 'reception') {
+    document.getElementById('reception-section').style.display = 'block';
+    document.getElementById('waiting-section').style.display = 'block';
+  }
+  if(role === 'triage') {
+    document.getElementById('triage-section').style.display = 'block';
+    document.getElementById('waiting-section').style.display = 'block';
+  }
+  if(role === 'doctor') {
+    document.getElementById('doctor-section').style.display = 'block';
+    document.getElementById('waiting-section').style.display = 'block';
+  }
+  if(role === 'admin') {
+    document.getElementById('admin-section').style.display = 'block';
+    document.getElementById('reception-section').style.display = 'block';
+    document.getElementById('triage-section').style.display = 'block';
+    document.getElementById('doctor-section').style.display = 'block';
+    document.getElementById('waiting-section').style.display = 'block';
+  }
+}
+
+// Add patient
+function addPatient(){
+  const name = document.getElementById('pname').value;
+  const dob = document.getElementById('pdob').value;
+  const contact = document.getElementById('pcontact').value;
+  const symptoms = document.getElementById('psymptoms').value;
+  if(!name || !dob || !contact || !symptoms) return alert("Fill all fields!");
+  let patients = JSON.parse(localStorage.getItem('patients'));
+  patients.push({
+    id:'P'+Date.now(),
+    name, dob, contact, symptoms,
+    arrivalTime:new Date().toISOString(),
+    triageLevel:3,
+    status:'waiting',
+    notes:[]
+  });
+  localStorage.setItem('patients', JSON.stringify(patients));
+  renderWaitingList();
+  renderTriageQueue();
+  renderDoctorQueue();
+  alert('Patient added!');
+}
+
+// Render waiting list
+function renderWaitingList(){
+  const patients = JSON.parse(localStorage.getItem('patients')).filter(p=>p.status==='waiting');
+  const container = document.getElementById('waitingList');
+  container.innerHTML = '';
+  patients.forEach(p=>{
+    const div = document.createElement('div');
+    div.className = 'patient-card';
+    div.innerHTML = `<strong>${p.name}</strong> | ${p.symptoms} | Arrived: ${new Date(p.arrivalTime).toLocaleTimeString()}`;
+    container.appendChild(div);
+  });
+}
+
+// Render triage queue
+function renderTriageQueue(){
+  const patients = JSON.parse(localStorage.getItem('patients')).filter(p=>p.status==='waiting');
+  const container = document.getElementById('triageQueue');
+  container.innerHTML = '';
+  patients.forEach(p=>{
+    const div = document.createElement('div');
+    div.className = 'patient-card';
+    div.innerHTML = `<strong>${p.name}</strong> | Symptoms: ${p.symptoms} | Level: ${p.triageLevel} 
+    <button onclick="setTriage('${p.id}',1)">Level 1</button>
+    <button onclick="setTriage('${p.id}',2)">Level 2</button>
+    <button onclick="setTriage('${p.id}',3)">Level 3</button>`;
+    container.appendChild(div);
+  });
+}
+
+// Set triage level
+function setTriage(id,level){
+  let patients = JSON.parse(localStorage.getItem('patients'));
+  const p = patients.find(p=>p.id===id);
+  if(p){ p.triageLevel=level; localStorage.setItem('patients', JSON.stringify(patients)); renderTriageQueue(); renderDoctorQueue(); }
+}
+
+// Render doctor queue
+function renderDoctorQueue(){
+  const patients = JSON.parse(localStorage.getItem('patients')).filter(p=>p.status==='waiting');
+  const container = document.getElementById('doctorQueue');
+  container.innerHTML = '';
+  patients.forEach(p=>{
+    const div = document.createElement('div');
+    div.className = 'patient-card';
+    div.innerHTML = `<strong>${p.name}</strong> | Level: ${p.triageLevel} | Symptoms: ${p.symptoms} 
+    <button onclick="startConsultation('${p.id}')">Start Consultation</button>`;
+    container.appendChild(div);
+  });
+}
+
+// Start consultation
+function startConsultation(id){
+  let patients = JSON.parse(localStorage.getItem('patients'));
+  const p = patients.find(p=>p.id===id);
+  if(p){ p.status='in-consultation'; localStorage.setItem('patients', JSON.stringify(patients)); renderWaitingList(); renderDoctorQueue(); renderTriageQueue(); alert(`${p.name} in consultation.`);}
+}
+
+// Admin - user management
+function renderUserList(){
+  const users = JSON.parse(localStorage.getItem('users'));
+  const container = document.getElementById('userList');
+  container.innerHTML = '';
+  users.forEach(u=>{
+    const div = document.createElement('div');
+    div.innerText = `${u.username} (${u.role})`;
+    container.appendChild(div);
+  });
+}
+
+function addUser(){
+  const username = document.getElementById('newUsername').value;
+  const password = document.getElementById('newPassword').value;
+  const role = document.getElementById('newRole').value;
+  if(!username||!password) return alert("Fill username/password");
+  let users = JSON.parse(localStorage.getItem('users'));
+  users.push({username,password,role});
+  localStorage.setItem('users', JSON.stringify(users));
+  renderUserList();
+  alert('User added!');
+}
 </script>
 </body>
 </html>
