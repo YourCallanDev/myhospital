@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<h1>Admin Dashboard</h1>
+
+<h2>System Statistics</h2>
+<div id="statsPanel"></div>
+
+<h2>Manage Users</h2>
+<form id="userForm">
+  <input type="text" id="newUsername" placeholder="Username" required>
+  <input type="password" id="newPassword" placeholder="Password" required>
+  <select id="newRole">
+    <option value="reception">Reception</option>
+    <option value="triage">Triage Nurse</option>
+    <option value="doctor">Doctor</option>
+    <option value="admin">Admin</option>
+  </select>
+  <button type="submit">Add User</button>
+</form>
+<div id="userList"></div>
+
+<script src="js/main.js"></script>
+<script src="js/admin.js"></script>
+<script>
+renderStats();
+renderUserList();
+document.getElementById('userForm').addEventListener('submit', function(e){
+  e.preventDefault();
+  addUser({
+    username: document.getElementById('newUsername').value,
+    password: document.getElementById('newPassword').value,
+    role: document.getElementById('newRole').value
+  });
+});
+</script>
+</body>
+</html>
